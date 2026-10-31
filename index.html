@@ -2,105 +2,178 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SHASHKA COIN</title>
 <style>
-body {
-  background:#101827;color:white;
-  font-family:Arial;text-align:center;
-  padding:15px;
-}
-h1 {color:#facc15}
-#board {
-  display:grid;
-  grid-template-columns:repeat(8,1fr);
-  width:min(94vw,440px);
-  margin:20px auto;
-  border:4px solid #d6a64a;
-}
-.cell {
-  aspect-ratio:1;
-  display:grid;
-  place-items:center;
-  font-size:clamp(22px,7vw,38px);
-}
-.light {background:#f0d9b5}
-.dark {background:#805333}
-.piece {
-  width:72%;height:72%;
-  border-radius:50%;
-  display:grid;place-items:center;
-  box-shadow:inset 0 -4px 0 #0005;
-}
-.white {background:#fff;color:#222}
-.black {background:#222;color:white}
-.selected {outline:4px solid #facc15}
-button {
-  padding:12px 20px;border:0;
-  border-radius:10px;background:#eab308;
-  font-weight:bold;
-}
+body{background:#101827;color:white;font-family:Arial;text-align:center;padding:12px}
+h1{color:#facc15}
+#board{display:grid;grid-template-columns:repeat(8,1fr);width:min(94vw,440px);margin:20px auto;border:4px solid #d6a64a}
+.cell{aspect-ratio:1;display:grid;place-items:center;font-size:clamp(20px,7vw,36px)}
+.light{background:#f0d9b5}.dark{background:#805333}
+.piece{width:72%;height:72%;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 -4px 0 #0005}
+.w{background:white;color:#222}.b{background:#222;color:white}
+.selected{outline:4px solid #facc15;outline-offset:-4px}
+button{padding:12px 20px;border:0;border-radius:10px;background:#eab308;font-weight:bold}
 </style>
 </head>
 <body>
 <h1>♟️ SHASHKA COIN</h1>
 <p id="turn">Oq donalar yuradi</p>
 <div id="board"></div>
+<p id="status">Donani tanlang</p>
 <button onclick="resetGame()">Qayta boshlash</button>
 
 <script>
-let board, turn, selected;
+let B,turn,selected,chain,gameOver;
 
-function resetGame() {
-  board = Array.from({length:8},()=>Array(8).fill(""));
-  for(let r=0;r<3;r++)
-    for(let c=0;c<8;c++)
-      if((r+c)%2===1) board[r][c]="b";
-  for(let r=5;r<8;r++)
-    for(let c=0;c<8;c++)
-      if((r+c)%2===1) board[r][c]="w";
-  turn="w"; selected=null; draw();
+const dirs=[[-1,-1],[-1,1],[1,-1],[1,1]];
+
+function inside(r,c){return r>=0&&r<8&&c>=0&&c<8}
+function king(p){return p==="W"||p==="B"}
+function side(p){return p.toLowerCase()}
+
+function resetGame(){
+ B=Array.from({length:8},()=>Array(8).fill(""));
+ for(let r=0;r<3;r++)for(let c=0;c<8;c++)
+  if((r+c)%2===1)B[r][c]="b";
+ for(let r=5;r<8;r++)for(let c=0;c<8;c++)
+  if((r+c)%2===1)B[r][c]="w";
+ turn="w";selected=null;chain=false;gameOver=false;
+ document.getElementById("status").textContent="Donani tanlang";
+ draw();
 }
 
-function draw() {
-  const el=document.getElementById("board");
-  el.innerHTML="";
-  document.getElementById("turn").textContent =
-    turn==="w"?"Oq donalar yuradi":"Qora donalar yuradi";
-
-  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
-    const cell=document.createElement("div");
-    cell.className="cell "+((r+c)%2?"dark":"light");
-    if(selected && selected[0]===r && selected[1]===c)
-      cell.classList.add("selected");
-
-    if(board[r][c]) {
-      const p=document.createElement("div");
-      p.className="piece "+(board[r][c]==="w"?"white":"black");
-      p.textContent="●";
-      cell.appendChild(p);
+function captures(r,c){
+ let p=B[r][c],out=[];
+ for(let [dr,dc] of dirs){
+  let nr=r+dr,nc=c+dc;
+  if(!king(p)){
+   if(inside(nr,nc)&&B[nr][nc]&&side(B[nr][nc])!==turn){
+    let lr=nr+dr,lc=nc+dc;
+    if(inside(lr,lc)&&!B[lr][lc])out.push([lr,lc,nr,nc]);
+   }
+  }else{
+   while(inside(nr,nc)&&!B[nr][nc]){nr+=dr;nc+=dc}
+   if(inside(nr,nc)&&side(B[nr][nc])!==turn){
+    let er=nr+dr,ec=nc+dc;
+    while(inside(er,ec)&&!B[er][ec]){
+     out.push([er,ec,nr,nc]);er+=dr;ec+=dc;
     }
-    cell.onclick=()=>clickCell(r,c);
-    el.appendChild(cell);
+   }
   }
+ }
+ return out;
 }
 
-function clickCell(r,c) {
-  if(!selected) {
-    if(board[r][c]===turn) selected=[r,c];
-  } else {
-    let [sr,sc]=selected;
-    let piece=board[sr][sc];
-    let direction=piece==="w"?-1:1;
-    if(!board[r][c] && Math.abs(c-sc)===1 &&
-       r-sr===direction) {
-      board[r][c]=piece;
-      board[sr][sc]="";
-      turn=turn==="w"?"b":"w";
-    }
-    selected=null;
+function moves(r,c){
+ let p=B[r][c],out=[];
+ if(king(p)){
+  for(let [dr,dc] of dirs){
+   let nr=r+dr,nc=c+dc;
+   while(inside(nr,nc)&&!B[nr][nc]){
+    out.push([nr,nc]);nr+=dr;nc+=dc;
+   }
   }
-  draw();
+ }else{
+  let dr=p==="w"?-1:1;
+  for(let dc of [-1,1]){
+   let nr=r+dr,nc=c+dc;
+   if(inside(nr,nc)&&!B[nr][nc])out.push([nr,nc]);
+  }
+ }
+ return out;
+}
+
+function allCaptures(){
+ let out=[];
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++)
+  if(B[r][c]&&side(B[r][c])===turn)
+   for(let m of captures(r,c))out.push([r,c,...m]);
+ return out;
+}
+
+function draw(){
+ let el=document.getElementById("board");
+ el.innerHTML="";
+ document.getElementById("turn").textContent=
+ turn==="w"?"Oq donalar yuradi":"Qora donalar yuradi";
+
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  let cell=document.createElement("div");
+  cell.className="cell "+((r+c)%2?"dark":"light");
+  if(selected&&selected[0]===r&&selected[1]===c)
+   cell.classList.add("selected");
+  if(B[r][c]){
+   let p=document.createElement("div");
+   p.className="piece "+(side(B[r][c])==="w"?"w":"b");
+   p.textContent=king(B[r][c])?"♛":"●";
+   cell.appendChild(p);
+  }
+  cell.onclick=()=>clickCell(r,c);
+  el.appendChild(cell);
+ }
+}
+
+function clickCell(r,c){
+ if(gameOver)return;
+ if(selected){
+  let [sr,sc]=selected,p=B[sr][sc];
+  let cap=captures(sr,sc);
+  let target=cap.find(x=>x[0]===r&&x[1]===c);
+  if(target){
+   let [lr,lc,er,ec]=target;
+   B[lr][lc]=p;B[sr][sc]="";B[er][ec]="";
+   if(p==="w"&&lr===0)B[lr][lc]="W";
+   if(p==="b"&&lr===7)B[lr][lc]="B";
+   selected=[lr,lc];
+   if(captures(lr,lc).length){
+    document.getElementById("status").textContent="Yana urishni davom ettiring!";
+    draw();return;
+   }
+   selected=null;
+   finishTurn();return;
+  }
+  if(!chain&&cap.length===0&&moves(sr,sc).some(m=>m[0]===r&&m[1]===c)){
+   B[r][c]=p;B[sr][sc]="";
+   if(p==="w"&&r===0)B[r][c]="W";
+   if(p==="b"&&r===7)B[r][c]="B";
+   selected=null;finishTurn();return;
+  }
+  if(chain)return;
+  selected=null;
+ }
+ if(B[r][c]&&side(B[r][c])===turn){
+  let must=allCaptures();
+  if(must.length&&!captures(r,c).length){
+   document.getElementById("status").textContent="Avval urish kerak!";
+  }else{
+   selected=[r,c];
+   document.getElementById("status").textContent="Yurish uchun katakni tanlang";
+  }
+ }
+ draw();
+}
+
+function finishTurn(){
+ chain=false;
+ turn=turn==="w"?"b":"w";
+ selected=null;
+ let pieces=0;
+ for(let row of B)for(let p of row)if(p&&side(p)===turn)pieces++;
+ if(!pieces||(!allCaptures().length&&!hasMoves())){
+  gameOver=true;
+  document.getElementById("status").textContent=
+   (turn==="w"?"Qora":"Oq")+" g‘olib bo‘ldi!";
+ }else{
+  document.getElementById("status").textContent="Yurish navbati almashdi";
+ }
+ draw();
+}
+
+function hasMoves(){
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++)
+  if(B[r][c]&&side(B[r][c])===turn&&moves(r,c).length)return true;
+ return false;
 }
 
 resetGame();
